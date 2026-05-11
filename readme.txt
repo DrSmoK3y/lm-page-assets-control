@@ -1,4 +1,4 @@
-=== Lazy Asset Blocker ===
+=== Lazy Assets Blocker ===
 Contributors: lmdesigners
 Tags: performance, speed, asset management, css javascript, page speed, optimization
 Requires at least: 5.0
