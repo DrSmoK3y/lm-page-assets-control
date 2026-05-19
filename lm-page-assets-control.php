@@ -6,7 +6,7 @@
  * Version:           1.0.0
  * Requires at least: 5.0
  * Requires PHP:      7.4
- * Author:            DrSmoK3y
+ * Author:            LM Designers
  * Author URI:        https://lmwebdesigners.com/
  * License:           GPL v2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -42,6 +42,11 @@ function lpac_init_blocker() {
 				'type'      => isset( $rule['asset_type'] ) ? $rule['asset_type'] : 'both',
 			);
 		}
+	}
+
+	// Set flag so frontend can enqueue debug script if needed.
+	if ( current_user_can( 'manage_options' ) && get_option( 'lpac_debug_mode', 0 ) ) {
+		$GLOBALS['lpac_show_debug'] = true;
 	}
 }
 
@@ -219,7 +224,7 @@ function lpac_debug_output() {
 	echo '<span style="color:#86efac">&#9646; Green = Plugin/Theme</span> &nbsp; ';
 	echo '<span style="color:#fde68a">&#9646; Yellow = WordPress Core</span>';
 	echo '</span>';
-	echo '<button onclick="document.getElementById(\'aw-debug\').remove()" style="background:#ef4444;color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-weight:700">&#x2715; Close</button>';
+	echo '<button id="lpac-debug-close" type="button" style="background:#ef4444;color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-weight:700">&#x2715; Close</button>';
 	echo '</div>';
 
 	echo '<div style="display:flex;flex:1;overflow:hidden">';
@@ -258,13 +263,11 @@ function lpac_debug_output() {
 
 			echo '<div style="display:flex;' . esc_attr( $row_bg ) . 'padding:3px 0">';
 
-			// Handle cell — clickable to copy
+			// Handle cell — clickable to copy (handled via delegated enqueued script)
 			echo '<div style="color:' . esc_attr( $handle_col ) . ';';
 			echo 'padding:3px 10px;font-weight:700;cursor:pointer;min-width:220px;white-space:nowrap"';
 			echo ' title="' . esc_attr__( 'Click to copy', 'lm-page-assets-control' ) . '"';
-			echo ' onclick="navigator.clipboard.writeText(\'' . esc_js( $handle ) . '\');';
-			echo 'this.style.background=\'#16a34a\';';
-			echo 'setTimeout(function(){this.style.background=\'\';}.bind(this),1000)">';
+			echo ' data-lpac-copy="' . esc_attr( $handle ) . '">';
 			echo esc_html( $handle );
 			echo '</div>';
 
@@ -282,6 +285,31 @@ function lpac_debug_output() {
 	echo '</div></div>';
 }
 
+// Enqueue debug-panel JS on frontend when debug mode is active.
+add_action( 'wp_enqueue_scripts', function () {
+	if ( empty( $GLOBALS['lpac_show_debug'] ) ) {
+		return;
+	}
+	wp_register_script( 'lpac-debug', false, array(), LPAC_VERSION, true );
+	wp_enqueue_script( 'lpac-debug' );
+	wp_add_inline_script(
+		'lpac-debug',
+		'document.addEventListener("click",function(e){' .
+			'if(e.target&&e.target.id==="lpac-debug-close"){' .
+				'e.preventDefault();' .
+				'var d=document.getElementById("lpac-debug");' .
+				'if(d)d.remove();' .
+			'}' .
+			'var c=e.target.closest?e.target.closest("[data-lpac-copy]"):null;' .
+			'if(c){' .
+				'navigator.clipboard.writeText(c.getAttribute("data-lpac-copy"));' .
+				'c.style.background="#16a34a";' .
+				'setTimeout(function(){c.style.background="";},1000);' .
+			'}' .
+		'});'
+	);
+} );
+
 // ═══════════════════════════════════════════════════════════════════
 // ADMIN MENU
 // ═══════════════════════════════════════════════════════════════════
@@ -296,11 +324,56 @@ add_action( 'admin_menu', function () {
 	);
 } );
 
+// ── Helper: condition definitions ───────────────────────────────
+function lpac_get_conditions() {
+	return array(
+		'everywhere'          => array( 'label' => __( 'Everywhere (all pages)', 'lm-page-assets-control' ),            'icon' => '🌐' ),
+		'is_front_page'       => array( 'label' => __( 'Home / Front page', 'lm-page-assets-control' ),                 'icon' => '🏠' ),
+		'not_front_page'      => array( 'label' => __( 'Everywhere except home', 'lm-page-assets-control' ),             'icon' => '🚫' ),
+		'is_home'             => array( 'label' => __( 'Blog index page', 'lm-page-assets-control' ),                   'icon' => '📰' ),
+		'is_single'           => array( 'label' => __( 'Single posts', 'lm-page-assets-control' ),                       'icon' => '📄' ),
+		'is_page'             => array( 'label' => __( 'Specific page (slug or ID)', 'lm-page-assets-control' ),        'icon' => '📌' ),
+		'is_archive'          => array( 'label' => __( 'Archive pages', 'lm-page-assets-control' ),                     'icon' => '📂' ),
+		'is_category'         => array( 'label' => __( 'Category pages', 'lm-page-assets-control' ),                    'icon' => '🗂️' ),
+		'is_tag'              => array( 'label' => __( 'Tag pages', 'lm-page-assets-control' ),                         'icon' => '🏷️' ),
+		'is_search'           => array( 'label' => __( 'Search results', 'lm-page-assets-control' ),                    'icon' => '🔎' ),
+		'is_404'              => array( 'label' => __( '404 page', 'lm-page-assets-control' ),                          'icon' => '❌' ),
+		'is_shop'             => array( 'label' => __( 'WooCommerce — Shop', 'lm-page-assets-control' ),           'icon' => '🛍️' ),
+		'not_shop'            => array( 'label' => __( 'WooCommerce — Not shop', 'lm-page-assets-control' ),      'icon' => '🚫' ),
+		'is_product'          => array( 'label' => __( 'WooCommerce — Single product', 'lm-page-assets-control' ), 'icon' => '📦' ),
+		'is_product_category' => array( 'label' => __( 'WooCommerce — Product category', 'lm-page-assets-control' ),'icon' => '🗃️' ),
+		'is_cart'             => array( 'label' => __( 'WooCommerce — Cart', 'lm-page-assets-control' ),           'icon' => '🛒' ),
+		'is_checkout'         => array( 'label' => __( 'WooCommerce — Checkout', 'lm-page-assets-control' ),       'icon' => '💳' ),
+		'is_account_page'     => array( 'label' => __( 'WooCommerce — My Account', 'lm-page-assets-control' ),    'icon' => '👤' ),
+		'url_contains'        => array( 'label' => __( 'URL contains…', 'lm-page-assets-control' ),               'icon' => '🔍' ),
+		'url_not_contains'    => array( 'label' => __( 'URL does NOT contain…', 'lm-page-assets-control' ),        'icon' => '🔍' ),
+	);
+}
+
+function lpac_get_needs_val_conditions() {
+	return array( 'is_page', 'url_contains', 'url_not_contains' );
+}
+
+// ── Admin assets (CSS + JS) ────────────────────────────────────────
 add_action( 'admin_enqueue_scripts', function ( $hook ) {
 	if ( 'plugins_page_lm-page-assets-control' !== $hook ) {
 		return;
 	}
-	wp_add_inline_style( 'wp-admin', lpac_inline_css() );
+
+	// Dummy style handle for inline admin CSS.
+	wp_register_style( 'lpac-admin-style', false, array(), LPAC_VERSION );
+	wp_enqueue_style( 'lpac-admin-style' );
+	wp_add_inline_style( 'lpac-admin-style', lpac_inline_css() );
+
+	// Dummy script handle for inline admin JS.
+	wp_register_script( 'lpac-admin', false, array(), LPAC_VERSION, false );
+	wp_enqueue_script( 'lpac-admin' );
+
+	$rules      = get_option( LPAC_OPT, array() );
+	$conditions = lpac_get_conditions();
+	$needs_val  = lpac_get_needs_val_conditions();
+
+	wp_add_inline_script( 'lpac-admin', lpac_get_admin_js( count( $rules ), $conditions, $needs_val ) );
 } );
 
 // ── Save handler ──────────────────────────────────────────────────
@@ -315,7 +388,7 @@ add_action( 'admin_post_lpac_save', function () {
 
 	update_option( 'lpac_debug_mode', isset( $_POST['lpac_debug'] ) ? 1 : 0 );
 
-	$rlpac_rules = isset( $_POST['lpac_rules'] ) ? wp_unslash( $_POST['lpac_rules'] ) : array();
+	$rlpac_rules = isset( $_POST['lpac_rules'] ) ? map_deep( wp_unslash( $_POST['lpac_rules'] ), 'sanitize_text_field' ) : array();
 	$rules     = array();
 
 	foreach ( (array) $rlpac_rules as $r ) {
@@ -358,29 +431,8 @@ function lpac_admin_page() {
 		$saved = true;
 	}
 
-	$conditions = array(
-		'everywhere'          => array( 'label' => __( 'Everywhere (all pages)', 'lm-page-assets-control' ),            'icon' => '🌐' ),
-		'is_front_page'       => array( 'label' => __( 'Home / Front page', 'lm-page-assets-control' ),                 'icon' => '🏠' ),
-		'not_front_page'      => array( 'label' => __( 'Everywhere except home', 'lm-page-assets-control' ),             'icon' => '🚫' ),
-		'is_home'             => array( 'label' => __( 'Blog index page', 'lm-page-assets-control' ),                   'icon' => '📰' ),
-		'is_single'           => array( 'label' => __( 'Single posts', 'lm-page-assets-control' ),                       'icon' => '📄' ),
-		'is_page'             => array( 'label' => __( 'Specific page (slug or ID)', 'lm-page-assets-control' ),        'icon' => '📌' ),
-		'is_archive'          => array( 'label' => __( 'Archive pages', 'lm-page-assets-control' ),                     'icon' => '📂' ),
-		'is_category'         => array( 'label' => __( 'Category pages', 'lm-page-assets-control' ),                    'icon' => '🗂️' ),
-		'is_tag'              => array( 'label' => __( 'Tag pages', 'lm-page-assets-control' ),                         'icon' => '🏷️' ),
-		'is_search'           => array( 'label' => __( 'Search results', 'lm-page-assets-control' ),                    'icon' => '🔎' ),
-		'is_404'              => array( 'label' => __( '404 page', 'lm-page-assets-control' ),                          'icon' => '❌' ),
-		'is_shop'             => array( 'label' => __( 'WooCommerce &mdash; Shop', 'lm-page-assets-control' ),           'icon' => '🛍️' ),
-		'not_shop'            => array( 'label' => __( 'WooCommerce &mdash; Not shop', 'lm-page-assets-control' ),      'icon' => '🚫' ),
-		'is_product'          => array( 'label' => __( 'WooCommerce &mdash; Single product', 'lm-page-assets-control' ), 'icon' => '📦' ),
-		'is_product_category' => array( 'label' => __( 'WooCommerce &mdash; Product category', 'lm-page-assets-control' ),'icon' => '🗃️' ),
-		'is_cart'             => array( 'label' => __( 'WooCommerce &mdash; Cart', 'lm-page-assets-control' ),           'icon' => '🛒' ),
-		'is_checkout'         => array( 'label' => __( 'WooCommerce &mdash; Checkout', 'lm-page-assets-control' ),       'icon' => '💳' ),
-		'is_account_page'     => array( 'label' => __( 'WooCommerce &mdash; My Account', 'lm-page-assets-control' ),    'icon' => '👤' ),
-		'url_contains'        => array( 'label' => __( 'URL contains&hellip;', 'lm-page-assets-control' ),               'icon' => '🔍' ),
-		'url_not_contains'    => array( 'label' => __( 'URL does NOT contain&hellip;', 'lm-page-assets-control' ),        'icon' => '🔍' ),
-	);
-	$needs_val = array( 'is_page', 'url_contains', 'url_not_contains' );
+	$conditions = lpac_get_conditions();
+	$needs_val  = lpac_get_needs_val_conditions();
 	?>
 	<div id="lpac-wrap">
 
@@ -405,7 +457,7 @@ function lpac_admin_page() {
 				</div>
 				<div class="lpac-dc-desc">
 					<strong><?php esc_html_e( 'Workflow:', 'lm-page-assets-control' ); ?></strong>
-					<ol style="margin:5px 0 0 14px;padding:0;font-size:12px;line-height:1.9">
+					<<ol style="margin:5px 0 0 14px;padding:0;font-size:12px;line-height:1.9">
 						<li><?php esc_html_e( 'Enable Debug Mode → Save', 'lm-page-assets-control' ); ?></li>
 						<li><?php esc_html_e( 'Visit any page on your site (as logged-in admin)', 'lm-page-assets-control' ); ?></li>
 						<li><?php esc_html_e( 'Bottom panel shows all CSS/JS assets on that page', 'lm-page-assets-control' ); ?>
@@ -474,84 +526,6 @@ function lpac_admin_page() {
 			</div>
 		</form>
 	</div>
-
-	<script>
-	var lpacI = <?php echo absint( count( $rules ) ); ?>;
-	var lpacC = <?php echo wp_json_encode( $conditions ); ?>;
-	var lpacNV = <?php echo wp_json_encode( $needs_val ); ?>;
-
-	function lpacAdd() {
-		var es = document.getElementById( 'lpac-es' );
-		if ( es ) es.style.display = 'none';
-		var i = lpacI++, d = document.createElement( 'div' );
-		d.innerHTML = lpacHTML( i );
-		document.getElementById( 'lpac-rules-wrap' ).appendChild( d.firstElementChild );
-	}
-
-	function lpacHTML( i ) {
-		var p = '', f = true;
-		for ( var k in lpacC ) {
-			p += '<label class="lpac-pill' + ( f ? ' sel' : '' ) + '" onclick="lpacSel(this,' + i + ')">'
-			   + '<input type="radio" name="lpac_rules[' + i + '][condition]" value="' + k + '"' + ( f ? ' checked' : '' ) + '>'
-			   + '<span>' + lpacC[ k ].icon + '</span>' + lpacC[ k ].label + '</label>';
-			f = false;
-		}
-		return '<div class="lpac-rule open" id="lpac-rule-' + i + '">'
-			+ '<div class="lpac-rh" onclick="lpacTog(' + i + ')">'
-			+ '<div class="lpac-num">' + ( i + 1 ) + '</div>'
-			+ '<input class="lpac-name" type="text" name="lpac_rules[' + i + '][label]" placeholder="<?php echo esc_js( __( 'Rule name', 'lm-page-assets-control' ) ); ?>" onclick="event.stopPropagation()">'
-			+ '<div class="lpac-sw-wrap"><span class="lpac-sw-lbl"><?php echo esc_js( __( 'Active', 'lm-page-assets-control' ) ); ?></span>'
-			+ '<label class="lpac-sw"><input type="checkbox" name="lpac_rules[' + i + '][enabled]" value="1" checked onchange="lpacDim(this,' + i + ')"><span class="lpac-track"></span></label></div>'
-			+ '<span class="lpac-chev">&#9660;</span></div>'
-			+ '<div class="lpac-rb">'
-			+ '<div class="lpac-f lpac-primary"><span class="lpac-lbl">&#127919; <?php echo esc_js( __( 'Asset Handle', 'lm-page-assets-control' ) ); ?> <span class="lpac-badge"><?php echo esc_js( __( 'Get from Debug Mode', 'lm-page-assets-control' ) ); ?></span></span>'
-			+ '<input type="text" name="lpac_rules[' + i + '][asset_handle]" placeholder="<?php echo esc_js( __( 'e.g. blocksy-woocommerce', 'lm-page-assets-control' ) ); ?>">'
-			+ '<p class="lpac-hint"><?php echo esc_js( __( 'Enable Debug → visit page → click green handle → paste here. Partial match works.', 'lm-page-assets-control' ) ); ?></p></div>'
-			+ '<div class="lpac-f"><span class="lpac-lbl">&#128279; <?php echo esc_js( __( 'URL Fallback', 'lm-page-assets-control' ) ); ?> <span class="lpac-badge lpac-badge-gray"><?php echo esc_js( __( 'Optional', 'lm-page-assets-control' ) ); ?></span></span>'
-			+ '<input type="text" name="lpac_rules[' + i + '][asset_url]" placeholder="<?php echo esc_js( __( 'e.g. woocommerce.min.css', 'lm-page-assets-control' ) ); ?>">'
-			+ '<p class="lpac-hint"><?php echo esc_js( __( 'Used only if handle match finds nothing.', 'lm-page-assets-control' ) ); ?></p></div>'
-			+ '<div class="lpac-f"><span class="lpac-lbl">&#128193; <?php echo esc_js( __( 'Type', 'lm-page-assets-control' ) ); ?></span>'
-			+ '<div style="display:flex;gap:8px;flex-wrap:wrap">'
-			+ '<label class="lpac-pill sel" onclick="lpacT(this)"><input type="radio" name="lpac_rules[' + i + '][asset_type]" value="both" checked><?php echo esc_js( __( 'Both CSS+JS', 'lm-page-assets-control' ) ); ?></label>'
-			+ '<label class="lpac-pill" onclick="lpacT(this)"><input type="radio" name="lpac_rules[' + i + '][asset_type]" value="css"><?php echo esc_js( __( 'CSS Only', 'lm-page-assets-control' ) ); ?></label>'
-			+ '<label class="lpac-pill" onclick="lpacT(this)"><input type="radio" name="lpac_rules[' + i + '][asset_type]" value="js"><?php echo esc_js( __( 'JS Only', 'lm-page-assets-control' ) ); ?></label>'
-			+ '</div></div>'
-			+ '<div class="lpac-f"><span class="lpac-lbl">&#128205; <?php echo esc_js( __( 'Where to block', 'lm-page-assets-control' ) ); ?></span>'
-			+ '<div class="lpac-cg" id="lpac-cg-' + i + '">' + p + '</div></div>'
-			+ '<div class="lpac-pv" id="lpac-pv-' + i + '"><div class="lpac-f"><span class="lpac-lbl"><?php echo esc_js( __( 'Page slug / ID / URL', 'lm-page-assets-control' ) ); ?></span>'
-			+ '<input type="text" name="lpac_rules[' + i + '][page_value]" placeholder="<?php echo esc_js( __( 'e.g. about or /contact', 'lm-page-assets-control' ) ); ?>">'
-			+ '<p class="lpac-hint"><?php echo esc_js( __( 'Multiple pages: about, services, contact', 'lm-page-assets-control' ) ); ?></p></div></div>'
-			+ '</div>'
-			+ '<div class="lpac-rf"><button type="button" class="btn-rm" onclick="lpacRm(' + i + ')"><?php echo esc_js( __( '&times; Remove', 'lm-page-assets-control' ) ); ?></button></div>'
-			+ '</div>';
-	}
-
-	function lpacTog( i ) { var el = document.getElementById( 'lpac-rule-' + i ); if ( el ) el.classList.toggle( 'open' ); }
-	function lpacDim( cb, i ) { var el = document.getElementById( 'lpac-rule-' + i ); if ( el ) el.classList.toggle( 'disabled', ! cb.checked ); }
-	function lpacRm( i )  { var el = document.getElementById( 'lpac-rule-' + i ); if ( el ) el.remove(); }
-	function lpacT( l )   { l.closest( 'div' ).querySelectorAll( '.lpac-pill' ).forEach( function( x ) { x.classList.remove( 'sel' ); } ); l.classList.add( 'sel' ); }
-
-	function lpacSel( l, i ) {
-		var cg = document.getElementById( 'lpac-cg-' + i );
-		if ( cg ) cg.querySelectorAll( '.lpac-pill' ).forEach( function( x ) { x.classList.remove( 'sel' ); } );
-		l.classList.add( 'sel' );
-		var v  = l.querySelector( 'input' ).value;
-		var pv = document.getElementById( 'lpac-pv-' + i );
-		if ( pv ) pv.classList.toggle( 'show', lpacNV.indexOf( v ) !== -1 );
-	}
-
-	document.querySelectorAll( '.lpac-pill' ).forEach( function( l ) {
-		var inp = l.querySelector( 'input:checked' );
-		if ( ! inp ) return;
-		l.classList.add( 'sel' );
-		var card = l.closest( '[id^="lpac-rule-"]' );
-		if ( ! card ) return;
-		var i  = card.id.replace( 'lpac-rule-', '' );
-		var v  = inp.value;
-		var pv = document.getElementById( 'lpac-pv-' + i );
-		if ( pv ) pv.classList.toggle( 'show', lpacNV.indexOf( v ) !== -1 );
-	} );
-	</script>
 	<?php
 }
 
@@ -667,6 +641,91 @@ function lpac_render_rule( $i, $rule, $conditions, $needs_val ) {
 		</div>
 	</div>
 	<?php
+}
+
+// ── Inline admin JS (delivered via wp_add_inline_script) ──────────
+function lpac_get_admin_js( $rule_count, $conditions, $needs_val ) {
+	ob_start();
+	?>
+	var lpacI = <?php echo absint( $rule_count ); ?>;
+	var lpacC = <?php echo wp_json_encode( $conditions ); ?>;
+	var lpacNV = <?php echo wp_json_encode( $needs_val ); ?>;
+
+	function lpacAdd() {
+		var es = document.getElementById( 'lpac-es' );
+		if ( es ) es.style.display = 'none';
+		var i = lpacI++, d = document.createElement( 'div' );
+		d.innerHTML = lpacHTML( i );
+		document.getElementById( 'lpac-rules-wrap' ).appendChild( d.firstElementChild );
+	}
+
+	function lpacHTML( i ) {
+		var p = '', f = true;
+		for ( var k in lpacC ) {
+			p += '<label class="lpac-pill' + ( f ? ' sel' : '' ) + '" onclick="lpacSel(this,' + i + ')">'
+			   + '<input type="radio" name="lpac_rules[' + i + '][condition]" value="' + k + '"' + ( f ? ' checked' : '' ) + '>'
+			   + '<span>' + lpacC[ k ].icon + '</span>' + lpacC[ k ].label + '</label>';
+			f = false;
+		}
+		return '<div class="lpac-rule open" id="lpac-rule-' + i + '">'
+			+ '<div class="lpac-rh" onclick="lpacTog(' + i + ')">'
+			+ '<div class="lpac-num">' + ( i + 1 ) + '</div>'
+			+ '<input class="lpac-name" type="text" name="lpac_rules[' + i + '][label]" placeholder="<?php echo esc_js( __( 'Rule name', 'lm-page-assets-control' ) ); ?>" onclick="event.stopPropagation()">'
+			+ '<div class="lpac-sw-wrap"><span class="lpac-sw-lbl"><?php echo esc_js( __( 'Active', 'lm-page-assets-control' ) ); ?></span>'
+			+ '<label class="lpac-sw"><input type="checkbox" name="lpac_rules[' + i + '][enabled]" value="1" checked onchange="lpacDim(this,' + i + ')"><span class="lpac-track"></span></label></div>'
+			+ '<span class="lpac-chev">&#9660;</span></div>'
+			+ '<div class="lpac-rb">'
+			+ '<div class="lpac-f lpac-primary"><span class="lpac-lbl">&#127919; <?php echo esc_js( __( 'Asset Handle', 'lm-page-assets-control' ) ); ?> <span class="lpac-badge"><?php echo esc_js( __( 'Get from Debug Mode', 'lm-page-assets-control' ) ); ?></span></span>'
+			+ '<input type="text" name="lpac_rules[' + i + '][asset_handle]" placeholder="<?php echo esc_js( __( 'e.g. blocksy-woocommerce', 'lm-page-assets-control' ) ); ?>">'
+			+ '<p class="lpac-hint"><?php echo esc_js( __( 'Enable Debug → visit page → click green handle → paste here. Partial match works.', 'lm-page-assets-control' ) ); ?></p></div>'
+			+ '<div class="lpac-f"><span class="lpac-lbl">&#128279; <?php echo esc_js( __( 'URL Fallback', 'lm-page-assets-control' ) ); ?> <span class="lpac-badge lpac-badge-gray"><?php echo esc_js( __( 'Optional', 'lm-page-assets-control' ) ); ?></span></span>'
+			+ '<input type="text" name="lpac_rules[' + i + '][asset_url]" placeholder="<?php echo esc_js( __( 'e.g. woocommerce.min.css', 'lm-page-assets-control' ) ); ?>">'
+			+ '<p class="lpac-hint"><?php echo esc_js( __( 'Used only if handle match finds nothing.', 'lm-page-assets-control' ) ); ?></p></div>'
+			+ '<div class="lpac-f"><span class="lpac-lbl">&#128193; <?php echo esc_js( __( 'Type', 'lm-page-assets-control' ) ); ?></span>'
+			+ '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+			+ '<label class="lpac-pill sel" onclick="lpacT(this)"><input type="radio" name="lpac_rules[' + i + '][asset_type]" value="both" checked><?php echo esc_js( __( 'Both CSS+JS', 'lm-page-assets-control' ) ); ?></label>'
+			+ '<label class="lpac-pill" onclick="lpacT(this)"><input type="radio" name="lpac_rules[' + i + '][asset_type]" value="css"><?php echo esc_js( __( 'CSS Only', 'lm-page-assets-control' ) ); ?></label>'
+			+ '<label class="lpac-pill" onclick="lpacT(this)"><input type="radio" name="lpac_rules[' + i + '][asset_type]" value="js"><?php echo esc_js( __( 'JS Only', 'lm-page-assets-control' ) ); ?></label>'
+			+ '</div></div>'
+			+ '<div class="lpac-f"><span class="lpac-lbl">&#128205; <?php echo esc_js( __( 'Where to block', 'lm-page-assets-control' ) ); ?></span>'
+			+ '<div class="lpac-cg" id="lpac-cg-' + i + '">' + p + '</div></div>'
+			+ '<div class="lpac-pv" id="lpac-pv-' + i + '"><div class="lpac-f"><span class="lpac-lbl"><?php echo esc_js( __( 'Page slug / ID / URL', 'lm-page-assets-control' ) ); ?></span>'
+			+ '<input type="text" name="lpac_rules[' + i + '][page_value]" placeholder="<?php echo esc_js( __( 'e.g. about or /contact', 'lm-page-assets-control' ) ); ?>">'
+			+ '<p class="lpac-hint"><?php echo esc_js( __( 'Multiple pages: about, services, contact', 'lm-page-assets-control' ) ); ?></p></div></div>'
+			+ '</div>'
+			+ '<div class="lpac-rf"><button type="button" class="btn-rm" onclick="lpacRm(' + i + ')"><?php echo esc_js( __( '&times; Remove', 'lm-page-assets-control' ) ); ?></button></div>'
+			+ '</div>';
+	}
+
+	function lpacTog( i ) { var el = document.getElementById( 'lpac-rule-' + i ); if ( el ) el.classList.toggle( 'open' ); }
+	function lpacDim( cb, i ) { var el = document.getElementById( 'lpac-rule-' + i ); if ( el ) el.classList.toggle( 'disabled', ! cb.checked ); }
+	function lpacRm( i )  { var el = document.getElementById( 'lpac-rule-' + i ); if ( el ) el.remove(); }
+	function lpacT( l )   { l.closest( 'div' ).querySelectorAll( '.lpac-pill' ).forEach( function( x ) { x.classList.remove( 'sel' ); } ); l.classList.add( 'sel' ); }
+
+	function lpacSel( l, i ) {
+		var cg = document.getElementById( 'lpac-cg-' + i );
+		if ( cg ) cg.querySelectorAll( '.lpac-pill' ).forEach( function( x ) { x.classList.remove( 'sel' ); } );
+		l.classList.add( 'sel' );
+		var v  = l.querySelector( 'input' ).value;
+		var pv = document.getElementById( 'lpac-pv-' + i );
+		if ( pv ) pv.classList.toggle( 'show', lpacNV.indexOf( v ) !== -1 );
+	}
+
+	document.addEventListener( 'DOMContentLoaded', function() {
+		document.querySelectorAll( '.lpac-pill' ).forEach( function( l ) {
+			var inp = l.querySelector( 'input:checked' );
+			if ( ! inp ) return;
+			l.classList.add( 'sel' );
+			var card = l.closest( '[id^="lpac-rule-"]' );
+			if ( ! card ) return;
+			var i  = card.id.replace( 'lpac-rule-', '' );
+			var v  = inp.value;
+			var pv = document.getElementById( 'lpac-pv-' + i );
+			if ( pv ) pv.classList.toggle( 'show', lpacNV.indexOf( v ) !== -1 );
+		} );
+	} );
+	<?php
+	return ob_get_clean();
 }
 
 // ── Inline CSS ────────────────────────────────────────────────────
