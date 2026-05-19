@@ -1,6 +1,6 @@
-=== Lazy Assets Blocker ===
+=== LM Page Assets Control ===
 Contributors: lmdesigners
-Tags: performance, speed, asset management, css javascript, page speed, optimization
+Tags: performance, speed, asset management, css javascript, page speed
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 7.4
@@ -12,9 +12,9 @@ Block specific CSS and JS files from loading on pages where they are not needed.
 
 == Description ==
 
-**Lazy Asset Blocker** gives you full control over which CSS and JavaScript files load on each page of your WordPress site. Plugins often load their assets globally — on every single page — even when they are only needed on one or two. This causes unnecessary bloat, slower load times, and lower PageSpeed scores.
+**LM Page Assets Control** gives you full control over which CSS and JavaScript files load on each page of your WordPress site. Plugins often load their assets globally — on every single page — even when they are only needed on one or two. This causes unnecessary bloat, slower load times, and lower PageSpeed scores.
 
-With Lazy Asset Blocker, you can create simple rules to block any CSS or JS file from loading on specific pages, page types, or even everywhere except where it is needed.
+With LM Page Assets Control, you can create simple rules to block any CSS or JS file from loading on specific pages, page types, or even everywhere except where it is needed.
 
 = How It Works =
 
@@ -29,7 +29,7 @@ You provide a partial URL of the asset you want to block (for example `woocommer
 * **Named rules** — Give each rule a descriptive name so you can manage them easily.
 * **Multiple rules** — Add as many blocking rules as you need.
 * **Zero configuration** — No API keys, no external services, no bloat. Just install and use.
-* **Clean admin UI** — A simple, modern interface under Plugins → Asset Blocker.
+* **Clean admin UI** — A simple, modern interface under Plugins → LM Page Assets Control.
 * **WooCommerce compatible** — Includes dedicated conditions for Shop, Product, Cart, and Checkout pages.
 
 = Available Page Conditions =
@@ -67,9 +67,9 @@ This plugin is intended for developers, advanced WordPress users, and site owner
 
 == Installation ==
 
-1. Upload the `lazy-asset-blocker` folder to the `/wp-content/plugins/` directory, or install it directly through the WordPress Plugins screen.
+1. Upload the `lm-page-assets-control` folder to the `/wp-content/plugins/` directory, or install it directly through the WordPress Plugins screen.
 2. Activate the plugin through the **Plugins** screen in WordPress.
-3. Go to **Plugins → ⚡ Asset Blocker** in the WordPress admin menu.
+3. Go to **Plugins → LM Page Assets Control** in the WordPress admin menu.
 4. Click **Add New Rule** and fill in the asset URL partial and the condition.
 5. Click **Save All Rules**.
 
@@ -107,7 +107,7 @@ No. The plugin only runs on the frontend (`wp_enqueue_scripts` hook). Admin asse
 
 = Is there a premium version? =
 
-No. Lazy Asset Blocker is completely free with no premium upsell.
+No. LM Page Assets Control is completely free with no premium upsell.
 
 == Screenshots ==
 
